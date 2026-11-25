@@ -12,6 +12,9 @@ notes/
 # Private planning file, kept out of the public repo
 PROMPTS.md
 
+# Per-person Claude Code settings
+.claude/settings.local.json
+
 # Python
 __pycache__/
 *.py[cod]
