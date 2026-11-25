@@ -66,7 +66,7 @@ Rationale: this is a portfolio project. One invented number destroys trust in ev
 - Library and SDK usage MUST be checked against current documentation through the Context7 MCP
   server before the code is written. If Context7 is unavailable, the official documentation MUST be
   used instead, and the author MUST say so.
-- The Claude API rules in AGENTS.md section 6 are mandatory.
+- The LLM API rules in AGENTS.md section 6 are mandatory.
 - Documentation queries MUST NOT contain secrets, personal data, or private code.
 
 Rationale: SDKs change quickly. Code written from memory often calls APIs that no longer exist or
@@ -74,7 +74,8 @@ sends parameters the model rejects.
 
 ### VIII. Visible Core Skills
 
-- The agent loop MUST be our own code on the Claude Messages API.
+- The agent loop MUST be our own code that calls the LLM provider's chat API directly. The
+  provider and the default model are set in AGENTS.md section 6.
 - The credit bureau MUST be our own MCP server, used through our own client adapter.
 - A hosted agent service or agent framework MUST NOT replace either of them.
 

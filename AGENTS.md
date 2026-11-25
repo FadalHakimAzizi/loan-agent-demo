@@ -83,7 +83,8 @@ Known IDs:
 
 | Library | Context7 ID |
 |---|---|
-| Anthropic Python SDK | `/anthropics/anthropic-sdk-python` |
+| Groq Python SDK | `/groq/groq-python` |
+| Groq API docs | `/websites/console_groq` |
 | MCP Python SDK | `/modelcontextprotocol/python-sdk` |
 | GitHub Spec Kit | `/github/spec-kit` |
 
@@ -91,27 +92,36 @@ Resolve the IDs for FastAPI, SQLAlchemy, Alembic, Pydantic, and HTMX when you ne
 
 Never put API keys, secrets, personal data, or private code into a Context7 query.
 
-## 6. Claude API rules (current as of November 2026, verify with Context7)
+## 6. LLM API rules: Groq (checked November 2026, verify with Context7)
 
-- Model from env `LLM_MODEL`, default `claude-opus-5-5`. Use the exact ID with no date suffix. Changing the model is a human decision.
-- Set `output_config: {"effort": ...}` explicitly from env `LLM_EFFORT` (default `medium`). Use adaptive thinking (`thinking: {"type": "adaptive"}`) or omit `thinking`. Do **not** send `budget_tokens`, `thinking: {"type": "disabled"}`, `temperature`, `top_p`, or `top_k` (400 errors).
-- Forced `tool_choice` (`any` or `tool`) returns a 400 on this model. Use `tool_choice: auto` with a clear instruction and `strict: true` on tools (schemas need `required` and `additionalProperties: false`).
-- No assistant prefill (400). Use strict tools or `output_config.format` / `client.messages.parse()` for structured data. The `output_format` parameter is deprecated.
-- Write our own loop on the Messages API (`while stop_reason == "tool_use"`):
-  - Return all `tool_result` blocks of one assistant turn in a single user message.
-  - Use `is_error: true` for a failed tool instead of dropping it.
-  - Parse tool inputs as JSON and validate them with Pydantic before running them.
-- Check `stop_reason` before reading content, and handle `refusal` (read `stop_details`) and `max_tokens`. Enable server-side refusal fallbacks (beta `server-side-fallback-2026-07-01`, `fallbacks: "default"`) after checking the exact syntax.
-- Non-streaming `max_tokens` is around 16000. Cache the stable prefix (tools + system prompt) and check `usage.cache_read_input_tokens`.
-- Catch the SDK's typed exceptions from most to least specific. Never match on error strings. Retry only retryable errors.
-- MCP: the agent connects to `mcp_bureau` with the MCP Python SDK client (stdio locally, streamable HTTP when deployed), and an adapter converts MCP tools into Claude tool definitions. Claude's hosted MCP connector is optional, not the main path.
-- Live LLM calls cost money. Unit tests use a scripted fake LLM client and need no API key. Live evals run only on purpose (`pytest -m live` / `make eval`).
+- **Provider and model.** Groq, through the official Groq Python SDK (`groq`) and the Chat Completions API. The key comes from env `GROQ_API_KEY`. The model comes from env `LLM_MODEL`, default `openai/gpt-oss-120b`. Changing the provider or the model is a human decision.
+- **Reasoning.** Send `reasoning_effort` from env `LLM_EFFORT` (default `medium`; `low`, `medium`, or `high`). Only the GPT-OSS models accept it. The `reasoning` field of a response is model output like any other, so mask PII in it before it is logged or traced.
+- **Tools.**
+  - Every tool schema has `required` and `additionalProperties: false`.
+  - Add `strict: true` to a tool only after Context7 confirms Groq accepts it on tool definitions for the chosen model.
+  - Parse `tool_calls[].function.arguments` with `json.loads` and validate it with Pydantic before running the tool.
+  - Structured outputs (`response_format` with `json_schema`) cannot be combined with tools in one request, so the recommendation arrives as the arguments of the `submit_recommendation` tool.
+- **Our own loop on Chat Completions.**
+  - `submit_recommendation` is the terminal tool. `tool_choice: "required"` is allowed: if the model calls no tool, Groq returns a 400, and the loop handles it.
+  - Append the assistant message, then one `tool` message for every `tool_call_id`, before the next request.
+  - A failed tool returns a `tool` message with an error payload. Never drop it.
+  - Cap the number of turns. Reaching the cap means "refer to human".
+- **Responses and errors.**
+  - Check `finish_reason` before reading content, and treat `length` as a failed turn.
+  - When the model generates an invalid tool call, Groq returns a 400 whose error body has `failed_generation`. Check that field, not the message text.
+  - Catch the SDK's typed exceptions from most to least specific: `groq.APIConnectionError`, `groq.RateLimitError`, `groq.APIStatusError`, then `groq.GroqError`. Never match on error strings.
+  - Retry only retryable errors (connection, 429, 5xx). On 429, wait for `retry-after`.
+  - Set `max_completion_tokens` explicitly. Do not send `logprobs` or `logit_bias` (400 on Groq).
+- **Prompt caching** is automatic on `openai/gpt-oss-120b`. Keep the prefix stable (tools and system prompt first, no timestamps) and record `usage.prompt_tokens_details.cached_tokens`. Cached tokens do not count toward rate limits.
+- **Rate limits.** They apply per organization and per model. Free plan in November 2026: 30 requests/min, 1,000 requests/day, 8,000 tokens/min, 200,000 tokens/day. Code that calls the model repeatedly (evals, the public demo) must respect them. Each human uses their own Groq organization and key.
+- **MCP.** The agent connects to `mcp_bureau` with the MCP Python SDK client (stdio locally, streamable HTTP when deployed). An adapter converts MCP tools into Groq function tool definitions. Groq's hosted remote MCP is optional, not the main path.
+- **Live calls are limited.** They use quota or money. Unit tests use a scripted fake LLM client and need no API key. Live evals run only on purpose (`pytest -m live` / `make eval`).
 
 ## 7. Tech stack and conventions (plans must follow this)
 
 - Python 3.12, `uv`, `ruff` (lint + format), type hints, `pytest`.
 - FastAPI, Pydantic v2, SQLAlchemy 2 + Alembic, PostgreSQL. Use `Decimal` for money, never `float`.
-- Anthropic Python SDK, MCP Python SDK. Officer console: Jinja2 + HTMX inside the FastAPI app, with no frontend build step.
+- Groq Python SDK (`groq`), MCP Python SDK. Officer console: Jinja2 + HTMX inside the FastAPI app, with no frontend build step.
 - Docker; Google Cloud Run for deployment.
 - Code, comments, commits (Conventional Commits), specs, and README are in English. Agent messages to applicants are in Indonesian.
 
