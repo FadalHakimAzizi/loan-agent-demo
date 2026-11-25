@@ -1,0 +1,28 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+
+# Personal study notes (Indonesian), never committed
+notes/
+
+# Active Spec Kit feature is per person
+.specify/feature.json
+
+# Private planning file, kept out of the public repo
+PROMPTS.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
